@@ -11,6 +11,8 @@ Examples:
   ./venv/bin/python train.py --phase a
   ./venv/bin/python train.py --phase b --resume checkpoints/phase_a_final.zip
   ./venv/bin/python train.py --phase eval --resume checkpoints/phase_b_final.zip
+  ./venv/bin/python train.py --phase eval --resume checkpoints/phase_b_final.zip --holdout
+      (also evaluates on unseen holdout levels, e.g. 2-1, never trained on)
 """
 import argparse
 import glob
@@ -38,6 +40,12 @@ LEVELS = [
     "SuperMarioBros-1-2-v0",
     "SuperMarioBros-1-3-v0",
     "SuperMarioBros-1-4-v0",
+]
+
+# Levels the agent NEVER trains on: used only to test generalization
+# of whatever it learned in World 1.
+HOLDOUT_LEVELS = [
+    "SuperMarioBros-2-1-v0",
 ]
 
 # Agent acts every FRAMESKIP game frames.
@@ -216,11 +224,15 @@ def train_phase(levels, total_timesteps, name, resume=None, seed=0):
     vec_env.close()
 
 
-def evaluate(checkpoint, episodes_per_level=5):
+def evaluate(checkpoint, episodes_per_level=5, include_holdout=False):
     from stable_baselines3.common.vec_env import DummyVecEnv
 
+    levels = list(LEVELS)
+    if include_holdout:
+        levels += [lvl for lvl in HOLDOUT_LEVELS if lvl not in levels]
+
     results = {}
-    for level in LEVELS:
+    for level in levels:
         venv = DummyVecEnv([make_env(level)])
         model = PPO.load(checkpoint, env=venv)
         clears, xs, scores = 0, [], []
@@ -235,12 +247,14 @@ def evaluate(checkpoint, episodes_per_level=5):
             xs.append(info.get("x_pos", 0))
             scores.append(info.get("score", 0))
         results[level] = dict(clears=clears, episodes=episodes_per_level,
-                              mean_x=sum(xs) / len(xs), mean_score=sum(scores) / len(scores))
+                              mean_x=sum(xs) / len(xs), mean_score=sum(scores) / len(scores),
+                              holdout=level in HOLDOUT_LEVELS)
         venv.close()
     print("\n=== Evaluation ===")
     for level, r in results.items():
+        tag = "  [UNSEEN holdout]" if r["holdout"] else ""
         print(f"{level}: cleared {r['clears']}/{r['episodes']}  "
-              f"mean_x={r['mean_x']:.0f}  mean_score={r['mean_score']:.0f}")
+              f"mean_x={r['mean_x']:.0f}  mean_score={r['mean_score']:.0f}{tag}")
     return results
 
 
@@ -250,6 +264,8 @@ def main():
     ap.add_argument("--resume", default=None)
     ap.add_argument("--timesteps", type=int, default=None)
     ap.add_argument("--episodes", type=int, default=5)
+    ap.add_argument("--holdout", action="store_true",
+                    help="eval/record: also test on unseen holdout levels (never trained on)")
     args = ap.parse_args()
 
     ensure_rom()
@@ -263,7 +279,7 @@ def main():
     elif args.phase == "eval":
         if not args.resume:
             sys.exit("--resume <checkpoint> is required for eval")
-        evaluate(args.resume, args.episodes)
+        evaluate(args.resume, args.episodes, include_holdout=args.holdout)
 
 
 if __name__ == "__main__":

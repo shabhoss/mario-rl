@@ -17,13 +17,16 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from train import LEVELS, make_env, ensure_rom  # noqa: E402
+from train import LEVELS, HOLDOUT_LEVELS, make_env, ensure_rom  # noqa: E402
 
 
-def record(checkpoint, out_dir, fps=30):
+def record(checkpoint, out_dir, include_holdout=False, fps=30):
     os.makedirs(out_dir, exist_ok=True)
     ensure_rom()
-    for level in LEVELS:
+    levels = list(LEVELS)
+    if include_holdout:
+        levels += [lvl for lvl in HOLDOUT_LEVELS if lvl not in levels]
+    for level in levels:
         venv = DummyVecEnv([make_env(level)])
         model = PPO.load(checkpoint, env=venv)
         raw_env = venv.envs[0].env  # innermost env for rendering
@@ -56,8 +59,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--checkpoint", required=True)
     ap.add_argument("--out", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "videos"))
+    ap.add_argument("--holdout", action="store_true",
+                    help="also record the unseen holdout levels (never trained on)")
     args = ap.parse_args()
-    record(args.checkpoint, args.out)
+    record(args.checkpoint, args.out, include_holdout=args.holdout)
 
 
 if __name__ == "__main__":
