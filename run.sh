@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Run the full World-1 curriculum: phase A (1-1) then phase B (1-1..1-4).
+# Safe to re-run after a crash: each phase resumes from its latest checkpoint.
+set -u
+cd "$(dirname "$0")"
+PY=./venv/bin/python
+
+latest_ckpt() { ls -t checkpoints/$1 2>/dev/null | head -1; }
+
+RESUME_A=""
+ckpt_a=$(latest_ckpt "phase_a_ckpt_*.zip")
+[ -n "$ckpt_a" ] && RESUME_A="--resume $ckpt_a"
+
+# shellcheck disable=SC2086
+$PY train.py --phase a $RESUME_A >> train.log 2>&1
+STATUS_A=$?
+echo "phase A exit: $STATUS_A" >> train.log
+
+if [ $STATUS_A -eq 0 ]; then
+  RESUME_B=""
+  ckpt_b=$(latest_ckpt "phase_b_ckpt_*.zip")
+  if [ -n "$ckpt_b" ]; then
+    RESUME_B="--resume $ckpt_b"
+  elif [ -f checkpoints/phase_a_final.zip ]; then
+    RESUME_B="--resume checkpoints/phase_a_final.zip"
+  fi
+  # shellcheck disable=SC2086
+  $PY train.py --phase b $RESUME_B >> train.log 2>&1
+  echo "phase B exit: $?" >> train.log
+fi

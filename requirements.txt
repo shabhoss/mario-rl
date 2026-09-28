@@ -1,0 +1,8 @@
+numpy==1.26.4
+gym==0.21.0
+nes-py==8.2.1
+gym-super-mario-bros==7.4.0
+stable-baselines3==1.8.0
+opencv-python-headless
+# torch: install separately for CPU with:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu

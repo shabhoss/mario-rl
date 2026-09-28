@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+*.pyc
+checkpoints/
+logs/
+videos/
+roms/
+tmp/
+train.log
+*.mp4
+*.zip
+.DS_Store
