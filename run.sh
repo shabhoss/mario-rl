@@ -7,9 +7,16 @@ PY=./venv/bin/python
 
 latest_ckpt() { ls -t checkpoints/$1 2>/dev/null | head -1; }
 
+# Resume phase A from whichever checkpoint is freshest: the periodic
+# phase_a_ckpt (every 250k steps) or best_model.zip (saved on eval
+# improvement, often newer). Prevents re-losing progress on restarts.
 RESUME_A=""
-ckpt_a=$(latest_ckpt "phase_a_ckpt_*.zip")
-[ -n "$ckpt_a" ] && RESUME_A="--resume $ckpt_a"
+newest=""
+for c in checkpoints/phase_a_ckpt_*.zip checkpoints/best_model.zip; do
+  [ -f "$c" ] || continue
+  if [ -z "$newest" ] || [ "$c" -nt "$newest" ]; then newest="$c"; fi
+done
+[ -n "$newest" ] && RESUME_A="--resume $newest"
 
 # shellcheck disable=SC2086
 $PY train.py --phase a $RESUME_A >> train.log 2>&1

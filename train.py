@@ -217,7 +217,10 @@ def train_phase(levels, total_timesteps, name, resume=None, seed=0):
             max_grad_norm=0.5,
             seed=seed,
         )
-    model.learn(total_timesteps=total_timesteps, callback=[ckpt_cb, eval_cb])
+    # reset_num_timesteps=False: keep the checkpoint's step counter so
+    # restarts continue progress (6M total) instead of doing 6M more steps.
+    model.learn(total_timesteps=total_timesteps, callback=[ckpt_cb, eval_cb],
+                reset_num_timesteps=False)
     final = os.path.join(CKPT_DIR, f"{name}_final.zip")
     model.save(final)
     print(f"Saved {final}")
