@@ -33,5 +33,12 @@ if [ $STATUS_A -eq 0 ]; then
   fi
   # shellcheck disable=SC2086
   $PY train.py --phase b $RESUME_B >> train.log 2>&1
-  echo "phase B exit: $?" >> train.log
+  STATUS_B=$?
+  echo "phase B exit: $STATUS_B" >> train.log
+  # Propagate a non-zero exit so process supervisors (systemd) restart on
+  # failure; exit 0 only when the full curriculum actually finished.
+  exit $STATUS_B
+else
+  echo "phase A failed (exit $STATUS_A); not starting phase B" >> train.log
+  exit $STATUS_A
 fi
