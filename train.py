@@ -172,6 +172,28 @@ class CycleLevelsEnv(gym.Wrapper):
         return self.env.reset(**kwargs)
 
 
+def phase_remaining(name, total_timesteps, model):
+    """Steps still owed in this phase's budget, given a (possibly resumed) model.
+
+    With reset_num_timesteps=False, SB3 trains until
+    model.num_timesteps + total_timesteps, so on a resume we pass only the
+    remainder. Phase B's budget counts only steps taken after Phase A
+    finished (the counter stored in phase_a_final.zip).
+    """
+    if name == "phase_b":
+        ref_path = os.path.join(CKPT_DIR, "phase_a_final.zip")
+        if os.path.exists(ref_path):
+            ref = PPO.load(ref_path)
+            phase_start = ref.num_timesteps
+            del ref
+        else:
+            phase_start = 0
+        done_in_phase = model.num_timesteps - phase_start
+    else:
+        done_in_phase = model.num_timesteps
+    return max(0, total_timesteps - done_in_phase)
+
+
 def train_phase(levels, total_timesteps, name, resume=None, seed=0):
     os.makedirs(CKPT_DIR, exist_ok=True)
     os.makedirs(LOG_DIR, exist_ok=True)
@@ -217,10 +239,19 @@ def train_phase(levels, total_timesteps, name, resume=None, seed=0):
             max_grad_norm=0.5,
             seed=seed,
         )
-    # reset_num_timesteps=False: keep the checkpoint's step counter so
-    # restarts continue progress (6M total) instead of doing 6M more steps.
-    model.learn(total_timesteps=total_timesteps, callback=[ckpt_cb, eval_cb],
-                reset_num_timesteps=False)
+    # reset_num_timesteps=False keeps the checkpoint's step counter, so we must
+    # train only the *remaining* steps of this phase's budget. SB3 adds the
+    # supplied total_timesteps on top of the resumed counter, so passing the
+    # full budget after a resume would schedule another full budget of steps.
+    # Phase B's 15M budget is additional on top of Phase A's completed steps,
+    # measured against the step counter stored in phase_a_final.zip.
+    remaining = phase_remaining(name, total_timesteps, model)
+    if remaining > 0:
+        model.learn(total_timesteps=remaining, callback=[ckpt_cb, eval_cb],
+                    reset_num_timesteps=False)
+    else:
+        print(f"Phase {name}: budget already complete "
+              f"({model.num_timesteps} steps), skipping training.")
     final = os.path.join(CKPT_DIR, f"{name}_final.zip")
     model.save(final)
     print(f"Saved {final}")
